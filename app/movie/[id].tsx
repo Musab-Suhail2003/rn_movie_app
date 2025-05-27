@@ -1,0 +1,109 @@
+import { View, Text, ScrollView, Image, TouchableOpacity } from 'react-native'
+import React, { useEffect, useState } from 'react'
+import { router, useLocalSearchParams } from 'expo-router'
+import { fetchMovieDetails } from '@/api_services/api'
+import useFetch from '@/api_services/useFetch'
+import {icons} from '@/constants/icons'
+import { updateSaved } from '@/api_services/appwrite'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+
+interface MovieInfoProps {
+  label: string;
+  value?: string | number | null;
+}
+
+const MovieInfo = ({label, value}:MovieInfoProps) => (
+  <View className='flex-col items-start justify-center mt-5'>
+    <Text className='text-light-200 font-normal text-sm'>{label}</Text>
+    <Text className='text-light-100 font-bold text-sm mt-2'>{value ||'N/A'}</Text>
+  </View>
+)
+
+
+const MovieDetails = () => {
+  const [session, setSession] = useState<any>(null);
+  const [sessLoading, setSessLoading] = useState(true);
+  const [isSaved, setIsSaved] = useState(false);
+
+  useEffect(() => {
+    const getSession = async () => {
+      try {
+        const cachedSession = await AsyncStorage.getItem('session');
+        if (cachedSession !== null) {
+          setSession(JSON.parse(cachedSession));
+          console.log('Session:', cachedSession);
+        }
+      } catch (error) {
+        console.error("Error fetching session from cache:", error);
+      } finally {
+        setSessLoading(false);
+      }
+    };
+
+    getSession();
+  }, []);
+  
+  const { id } = useLocalSearchParams();
+  const { data: movie, loading } = useFetch(() =>
+    fetchMovieDetails(id as string)
+  );
+
+  return (
+      <View className='flex-1 bg-primary'>
+        <ScrollView contentContainerStyle={{paddingBottom: 80}}>
+          <View>
+            <Image source={{uri: `https://image.tmdb.org/t/p/w500${movie?.poster_path}`}}
+            className='w-full h-[550px]' resizeMode='stretch'/>
+          </View>
+          <View className='flex-col items-start justify-center mt-5 px-5'>
+            <Text className='text-white font-bold text-xl'>{movie?.title}</Text>
+            <View className='flex-row items-center gap-x-4 mt-2'>
+              <Text className='text-light-200 text-sm'>{movie?.release_date?.split('-')[0]}</Text>
+              <Text className='text-light-200 text-sm'>{movie?.runtime} min</Text>
+              {session ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    updateSaved(session.user.$id, movie!);
+                    setIsSaved(true);
+                  }}
+                  className= {isSaved ? 'p-8 border-radius-8 text-white': 'p-8 border-radius-8'}
+                >
+                  <Image 
+                    source={icons.save} 
+                    className='w-5 h-5'
+                    tintColor={isSaved ? 'pink' : 'white'}
+                  />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            <View className='flex-row items-center bg-dark-100 px-2 py-1 rounded-md gap-x-2 mt-2'>
+              <Image source={icons.star} className='size-4'/>
+              <Text className='text-white font-bold text-sm'>
+                {Math.round(movie?.vote_average??0)}/10
+                </Text>
+              <Text className='text-light-200 text-sm'>
+                ({movie?.vote_count} votes)
+              </Text>
+            </View>
+            <MovieInfo label='Overview' value={movie?.overview}/>
+            <MovieInfo label='Genres' value={movie?.genres?.map((g)=>g.name).join(' - ') || 'N/A'}/>
+            <View className='flex flex-row justify-between w-1/2 gap-x-8'>
+              <MovieInfo label='Budget' value={movie?.budget==0?"N/A":`$${(movie?.budget!/1_000_000)} million`}/>
+              <MovieInfo label='Revenue' value={movie?.budget==0?"N/A":`$${Math.round(movie?.revenue!/1_000_000)} million`}/>
+            </View>
+            <MovieInfo label='Production Companies' value={movie?.production_companies.map((c) => c.name).join(' - ') || 'N/A'}/>
+          </View>
+        </ScrollView>
+        <TouchableOpacity 
+        className='absolute bottom-5 right-0 left-0 mx-5 bg-accent rounded-lg py-3.5 flex flex-row items-center justify-center z-50'
+        onPress={() => router.back()}>
+          <Image source={icons.arrow} className='size-5 mr-1 mt-0.5 rotate-180' tintColor="#FFF"/>
+          <Text className='text-white font-sm text-base'>Go Back</Text>
+        </TouchableOpacity>
+        
+      </View>
+    
+  )
+}
+
+export default MovieDetails
